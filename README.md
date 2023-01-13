@@ -6,7 +6,7 @@
 
 ### Wiring Schematics
 
-<img width="877" alt="wiring" src="https://user-images.githubusercontent.com/55241427/212013448-0b6e56d6-68eb-4fe5-b63d-ba90c7049c52.png">
+<img width="1034" alt="wiring" src="https://user-images.githubusercontent.com/55241427/212345698-fe65ca1a-55f4-4555-9e88-8b73df958cab.png">
 
 ### esp32 wroom-32 pinout
 
