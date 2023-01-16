@@ -6,21 +6,22 @@
 #include <DNSServer.h>
 #include <time.h>
 #include <ESPAsyncWebServer.h>
+#include <FS.h>
 #include <SPIFFS.h>
+#include <melody_player.h>
+
 #include "FingerprintManager.h"
 #include "SettingsManager.h"
 #include "global.h"
+#include "player.h"
 
-enum class Mode { scan, enroll, wificonfig, maintenance };
+#define BUZZER_PIN 13
+
+MelodyPlayer player(BUZZER_PIN);
+
+enum class Mode { scan, enroll, maintenance };
 
 const char* VersionInfo = "0.4";
-
-// ===================================================================================================================
-// Caution: below are not the credentials for connecting to your home network, they are for the Access Point mode!!!
-// ===================================================================================================================
-const char* WifiConfigSsid = "FingerprintDoorbell-Config"; // SSID used for WiFi when in Access Point mode for configuration
-const char* WifiConfigPassword = "123456789"; // password used for WiFi when in Access Point mode for configuration. Min. 8 chars needed!
-IPAddress   WifiConfigIp(192, 168, 4, 1); // IP of access point in wifi config mode
 
 const long  gmtOffset_sec = 0; // UTC Time
 const int   daylightOffset_sec = 0; // UTC Time
@@ -263,6 +264,15 @@ void setup() {
   Serial.begin(115200);
   while (!Serial);  // For Yun/Leo/Micro/Zero/...
   delay(100);
+
+  SPIFFS.begin(true);
+
+  // Simple way to play track
+  // Melody track = getTrackPath("indiana");
+
+  // if (track) {
+  //   player.play(track);
+  // }
 
   // initialize GPIOs
   pinMode(doorbellOutputPin, OUTPUT);
