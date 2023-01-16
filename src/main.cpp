@@ -268,11 +268,11 @@ void setup() {
   SPIFFS.begin(true);
 
   // Simple way to play track
-  // Melody track = getTrackPath("indiana");
+  Melody track = getTrackPath("furelise");
 
-  // if (track) {
-  //   player.play(track);
-  // }
+  if (track) {
+    player.play(track);
+  }
 
   // initialize GPIOs
   pinMode(doorbellOutputPin, OUTPUT);
