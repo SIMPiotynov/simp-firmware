@@ -1,6 +1,41 @@
 #include "SettingsManager.h"
 #include <Crypto.h>
 
+bool SettingsManager::loadWifiSettings() {
+    Preferences preferences;
+    if (preferences.begin("wifiSettings", true)) {
+        wifiSettings.ssid = preferences.getString("ssid", String(""));
+        wifiSettings.password = preferences.getString("password", String(""));
+        preferences.end();
+        return true;
+    } else {
+        return false;
+    }
+}
+
+void SettingsManager::saveWifiSettings() {
+    Preferences preferences;
+    preferences.begin("wifiSettings", false);
+    preferences.putString("ssid", wifiSettings.ssid);
+    preferences.putString("password", wifiSettings.password);
+    preferences.end();
+}
+
+WifiSettings SettingsManager::getWifiSettings() {
+    return wifiSettings;
+}
+
+void SettingsManager::saveWifiSettings(WifiSettings newSettings) {
+    wifiSettings = newSettings;
+    saveWifiSettings();
+}
+
+bool SettingsManager::isWifiConfigured() {
+    if (wifiSettings.ssid.isEmpty() || wifiSettings.password.isEmpty())
+        return false;
+    else
+        return true;
+}
 
 bool SettingsManager::loadAppSettings() {
     Preferences preferences;
@@ -52,6 +87,8 @@ String SettingsManager::generateNewPairingCode() {
     hasher.doUpdate( String(esp_random()).c_str() ); // random number
     hasher.doUpdate( String(millis()).c_str() ); // time since boot
     hasher.doUpdate(getTimestampString().c_str()); // current time (if NTP is available)
+    hasher.doUpdate(wifiSettings.ssid.c_str());
+    hasher.doUpdate(wifiSettings.password.c_str());
 
     /* Compute the final hash */
     byte hash[SHA256_SIZE];

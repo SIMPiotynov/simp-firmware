@@ -6,6 +6,8 @@
 #include <DNSServer.h>
 #include <time.h>
 #include <ESPAsyncWebServer.h>
+#include <HTTPClient.h>
+#include <Arduino_JSON.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include <melody_player.h>
@@ -17,46 +19,30 @@
 
 #define BUZZER_PIN 13
 
-MelodyPlayer player(BUZZER_PIN);
+const char* VersionInfo = "0.4";
 
 enum class Mode { scan, enroll, maintenance };
 
-const char* VersionInfo = "0.4";
-
 const long  gmtOffset_sec = 0; // UTC Time
 const int   daylightOffset_sec = 0; // UTC Time
-const int   doorbellOutputPin = 19; // pin connected to the doorbell (when using hardware connection instead of mqtt to ring the bell)
-
-#ifdef CUSTOM_GPIOS
-  const int   customOutput1 = 18; // not used internally, but can be set over MQTT
-  const int   customOutput2 = 26; // not used internally, but can be set over MQTT
-  const int   customInput1 = 21; // not used internally, but changes are published over MQTT
-  const int   customInput2 = 22; // not used internally, but changes are published over MQTT
-  bool customInput1Value = false;
-  bool customInput2Value = false;
-#endif
 
 const int logMessagesCount = 5;
 String logMessages[logMessagesCount]; // log messages, 0=most recent log message
 bool shouldReboot = false;
 unsigned long wifiReconnectPreviousMillis = 0;
-unsigned long mqttReconnectPreviousMillis = 0;
 
 String enrollId;
 String enrollName;
+HTTPClient http;
 Mode currentMode = Mode::scan;
-
+MelodyPlayer player(BUZZER_PIN);
 FingerprintManager fingerManager;
 SettingsManager settingsManager;
 bool needMaintenanceMode = false;
 
-AsyncEventSource events("/events"); // event source (Server-Sent events)
-
 long lastMsg = 0;
 char msg[50];
 int value = 0;
-bool mqttConfigValid = true;
-
 
 Match lastMatch;
 
@@ -104,30 +90,15 @@ bool waitForMaintenanceMode() {
   return true;
 }
 
-// Replaces placeholder in HTML pages
-String processor(const String& var){
-  if(var == "LOGMESSAGES"){
-    return getLogMessagesAsHtml();
-  } else if (var == "FINGERLIST") {
-    return fingerManager.getFingerListAsHtmlOptionList();
-  } else if (var == "VERSIONINFO") {
-    return VersionInfo;
-  }
-
-  return String();
-}
-
 // send LastMessage to websocket clients
 void notifyClients(String message) {
   String messageWithTimestamp = "[" + getTimestampString() + "]: " + message;
   Serial.println(messageWithTimestamp);
   addLogMessage(messageWithTimestamp);
-  events.send(getLogMessagesAsHtml().c_str(),"message",millis(),1000);
 }
 
 void updateClientsFingerlist(String fingerlist) {
   Serial.println("New fingerlist was sent to clients");
-  events.send(fingerlist.c_str(),"fingerlist",millis(),1000);
 }
 
 
@@ -206,15 +177,13 @@ void doScan() {
     case ScanResult::noMatchFound:
       notifyClients(String("No Match Found (Code ") + match.returnCode + ")");
       if (match.scanResult != lastMatch.scanResult) {
-        // digitalWrite(doorbellOutputPin, HIGH);
         Serial.println("MQTT message sent: ring the bell!");
 
 
         enrollId = 1;
         enrollName = "newFingerprintName";
         currentMode = Mode::enroll;
-        // delay(1000);
-        // digitalWrite(doorbellOutputPin, LOW);
+        delay(1000);
       } else {
         Serial.println("Not the same finger.");
         delay(1000); // wait some time before next scan to let the LED blink
@@ -244,18 +213,50 @@ void doEnroll() {
   }
 }
 
+bool initWifi() {
+  // Connect to Wi-Fi
+  WifiSettings wifiSettings = settingsManager.getWifiSettings();
+  WiFi.mode(WIFI_STA);
+  WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  WiFi.begin(wifiSettings.ssid.c_str(), wifiSettings.password.c_str());
+  int counter = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Waiting for WiFi connection...");
+    counter++;
+    if (counter > 30)
+      return false;
+  }
+  Serial.println("Connected!");
 
+  // Print ESP32 Local IP Address
+  Serial.println(WiFi.localIP());
+
+  return true;
+}
 
 void reboot() {
   notifyClients("System is rebooting now...");
   delay(1000);
 
-  // mqttClient.disconnect();
-  // espClient.stop();
-  // dnsServer.stop();
-  // webServer.end();
-  // WiFi.disconnect();
+  WiFi.disconnect();
   ESP.restart();
+}
+
+void doRequest(const char * type, String payload) {
+  int httpResponseCode = http.sendRequest(type, payload);
+
+  if(httpResponseCode>0){
+    String response = http.getString();
+
+    Serial.println(httpResponseCode);
+    Serial.println(response);
+  }else{
+    Serial.print("Error on sending POST: ");
+    Serial.println(httpResponseCode);
+  }
+
+  http.end();
 }
 
 
@@ -268,39 +269,43 @@ void setup() {
   SPIFFS.begin(true);
 
   // Simple way to play track
-  Melody track = getTrackPath("furelise");
+  // Melody track = getTrackPath("furelise");
 
-  if (track) {
-    player.play(track);
-  }
+  // if (track) {
+  //   player.play(track);
+  // }
 
-  // initialize GPIOs
-  pinMode(doorbellOutputPin, OUTPUT);
-  #ifdef CUSTOM_GPIOS
-    pinMode(customOutput1, OUTPUT);
-    pinMode(customOutput2, OUTPUT);
-    pinMode(customInput1, INPUT_PULLDOWN);
-    pinMode(customInput2, INPUT_PULLDOWN);
-  #endif
+  http.begin("http://jsonplaceholder.typicode.com/posts");
+  http.addHeader("Content-Type", "text/plain");
 
+  settingsManager.loadWifiSettings();
   settingsManager.loadAppSettings();
-
   fingerManager.connect();
 
-  if (!checkPairingValid())
-    notifyClients("Security issue! Pairing with sensor is invalid. This could potentially be an attack! If the sensor is new or has been replaced by you do a (re)pairing in settings page. MQTT messages regarding matching fingerprints will not been sent until pairing is valid again.");
+  if (!checkPairingValid()) {
+    notifyClients("Security issue! Pairing with sensor is invalid. This could potentially be an attack! If the sensor is new or has been replaced by you do a (re)pairing in settings page.");
+  }
 
-  if (fingerManager.isFingerOnSensor()) {
+  if (fingerManager.isFingerOnSensor() || !settingsManager.isWifiConfigured()) {
+    Serial.println("Started WiFi-Config mode");
     fingerManager.setLedRingWifiConfig();
 
   } else {
     Serial.println("Started normal operating mode");
     currentMode = Mode::scan;
 
-    if (fingerManager.connected) {
-      fingerManager.setLedRingReady();
+    if (initWifi()) {
+
+      doRequest("POST", "POSTING from ESP32");
+
+      if (fingerManager.connected) {
+        fingerManager.setLedRingReady();
+      } else {
+        fingerManager.setLedRingError();
+      }
     } else {
       fingerManager.setLedRingError();
+      shouldReboot = true;
     }
   }
 
@@ -333,35 +338,8 @@ void loop() {
   }
 
   // enter maintenance mode (no continous scanning) if requested
-  if (needMaintenanceMode)
+  if (needMaintenanceMode) {
     currentMode = Mode::maintenance;
-
-  #ifdef CUSTOM_GPIOS
-    // read custom inputs and publish by MQTT
-    bool i1;
-    bool i2;
-    i1 = (digitalRead(customInput1) == HIGH);
-    i2 = (digitalRead(customInput2) == HIGH);
-
-    String mqttRootTopic = settingsManager.getAppSettings().mqttRootTopic;
-    if (i1 != customInput1Value) {
-        if (i1)
-          mqttClient.publish((String(mqttRootTopic) + "/customInput1").c_str(), "on");
-        else
-          mqttClient.publish((String(mqttRootTopic) + "/customInput1").c_str(), "off");
-    }
-
-    if (i2 != customInput2Value) {
-        if (i2)
-          mqttClient.publish((String(mqttRootTopic) + "/customInput2").c_str(), "on");
-        else
-          mqttClient.publish((String(mqttRootTopic) + "/customInput2").c_str(), "off");
-    }
-
-    customInput1Value = i1;
-    customInput2Value = i2;
-
-  #endif
-
+  }
 }
 

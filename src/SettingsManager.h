@@ -5,9 +5,8 @@
 #include "global.h"
 
 struct WifiSettings {
-    String ssid = "Xiaomi mi 9T";
-    String password = "cherchepas";
-    String hostname = "esp32.develop";
+    String ssid = "Freebox-32AEE6";
+    String password = "s9cz5qch22q6hf59qrvz9b";
 };
 
 struct AppSettings {
@@ -19,14 +18,22 @@ struct AppSettings {
 class SettingsManager {
   private:
     AppSettings appSettings;
+    WifiSettings wifiSettings;
 
     void saveAppSettings();
+    void saveWifiSettings();
 
   public:
     bool loadAppSettings();
+    bool loadWifiSettings();
+
+    WifiSettings getWifiSettings();
+    void saveWifiSettings(WifiSettings newSettings);
 
     AppSettings getAppSettings();
     void saveAppSettings(AppSettings newSettings);
+
+    bool isWifiConfigured();
 
     bool deleteAppSettings();
 
