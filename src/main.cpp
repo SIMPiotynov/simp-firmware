@@ -259,7 +259,6 @@ void doRequest(const char * type, String payload) {
   http.end();
 }
 
-
 void setup() {
   // open serial monitor for debug infos
   Serial.begin(115200);
@@ -269,7 +268,8 @@ void setup() {
   SPIFFS.begin(true);
 
   // Simple way to play track
-  // Melody track = getTrackPath("furelise");
+  // Melody track = getTrackPath("string", "California Love:d=4,o=5,b=90:8g.6,16f6,8c#6,8d6,8f6,d.6,2p,8g,8a#,8d6,8d6,p,8p,8g,8g,16g,8f.,8g,2p,8g,16a#,16g,8d6,2d6,16g,8g.,g,2p,8g,8a#,8d6,2d.6,16g,16g,8g,8f,8g,p,8g,8c6,8c6,8a#,8a,g,p,8g,c6,8a#,8a,2g,");
+  // Melody track = getTrackPath("file", "takeOnMe");
 
   // if (track) {
   //   player.play(track);

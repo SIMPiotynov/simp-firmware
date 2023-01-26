@@ -5,6 +5,6 @@
 
 #include "pitches.h"
 
-Melody getTrackPath(String name);
+Melody getTrackPath(String type, const char track[]);
 
 #endif

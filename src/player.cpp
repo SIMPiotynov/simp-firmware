@@ -5,13 +5,24 @@
 
 #include "player.h"
 
-Melody getTrackPath(String name) {
-    String path = "/" + name + ".rtttl";
+Melody getTrackPath(String type, const char track[]) {
+    Melody melody;
 
-    Melody melody = MelodyFactory.loadRtttlFile(path);
+    if (type.equals("file")) {
+        String path = "/" + String(track) + ".rtttl";
 
-    if (!melody) {
-        Serial.println(path + " not found, try to load another one...");
+        melody = MelodyFactory.loadRtttlFile(path);
+
+        if (!melody) {
+            Serial.println(path + " not found, try to load another one...");
+        }
+    } else {
+       melody =  MelodyFactory.loadRtttlString(track);
+
+        if (!melody) {
+            Serial.println("Your custom ringtone dosen't work, loading entertainer ringtone...");
+            melody = MelodyFactory.loadRtttlFile("/entertainer.rtttl");
+        }
     }
 
     return melody;
