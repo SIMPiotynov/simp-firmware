@@ -146,6 +146,50 @@ bool checkPairingValid() {
   }
 }
 
+void createUserApi(int fingerID) {
+  http.begin("http://192.168.43.28:8000/users");
+  http.addHeader("Content-Type", "application/json");
+
+  int httpResponseCode = http.POST("{ \"fingerprint\": " + String(fingerID) + ", \"lastname\": \"azert\", \"firstname\": \"azert\", \"isAuthorized\": false }");
+
+  if(httpResponseCode>0){
+    String response = http.getString();
+
+    Serial.println(httpResponseCode);
+    Serial.println(response);
+  }else{
+    Serial.print("Error on sending POST: ");
+    Serial.println(httpResponseCode);
+  }
+
+  http.end();
+}
+
+String getUserApi(int fingerID) {
+  // use the IP adress of your server/pc in the same network
+  http.begin("http://192.168.43.28:8000/users/fingerprint/" + String(fingerID));
+  http.addHeader("Content-Type", "application/json");
+
+  int httpResponseCode = http.GET();
+  String response;
+
+  if(httpResponseCode>0){
+    response = http.getString();
+
+    Serial.println(httpResponseCode);
+    Serial.println(response);
+  }else{
+    Serial.print("Error on sending GET: ");
+    Serial.println(httpResponseCode);
+
+    response = "nope";
+  }
+
+  http.end();
+
+  return response;
+}
+
 void doScan() {
   Match match = fingerManager.scanFingerprint();
 
@@ -163,9 +207,16 @@ void doScan() {
       if (match.scanResult != lastMatch.scanResult) {
         if (match.matchId != lastMatch.matchId) {
           if (checkPairingValid()) {
+            String user = getUserApi(match.matchId);
+
+            if (user == "nope") {
+              track = getTrackPath("string", "reussi:d=4,o=5,b=250:e,8p,8f,8g,8p,3c6");
+            } else {
+              track = getTrackPath("file", "simpsons");
+            }
+
             // Ouvre la porte et sonne
             Serial.println("Open the door!");
-            track = getTrackPath("string", "reussi:d=4,o=5,b=250:e,8p,8f,8g,8p,3c6");
 
             if (track) {
               player.play(track);
@@ -174,7 +225,7 @@ void doScan() {
         } else {
           // Mode enregistrement
           enrollId = fingerManager.countFingerRegistred() + 1;
-          enrollName = "newFingerprintName_" + String(1);
+          enrollName = "newFingerprintName_" + String(fingerManager.countFingerRegistred() + 1);
           currentMode = Mode::enroll;
         }
       } else {
@@ -217,6 +268,8 @@ void doEnroll() {
 
   NewFinger finger = fingerManager.enrollFinger(id, enrollName);
   if (finger.enrollResult == EnrollResult::ok) {
+    createUserApi(enrollId);
+
     notifyClients("Enrollment successfull. You can now use your new finger for scanning.");
     fingerManager.setFingersRegistred(enrollId);
   }  else if (finger.enrollResult == EnrollResult::error) {
@@ -254,22 +307,6 @@ void reboot() {
   ESP.restart();
 }
 
-void doRequest(const char * type, String payload) {
-  int httpResponseCode = http.sendRequest(type, payload);
-
-  if(httpResponseCode>0){
-    String response = http.getString();
-
-    Serial.println(httpResponseCode);
-    Serial.println(response);
-  }else{
-    Serial.print("Error on sending POST: ");
-    Serial.println(httpResponseCode);
-  }
-
-  http.end();
-}
-
 void setup() {
   // open serial monitor for debug infos
   Serial.begin(115200);
@@ -277,9 +314,6 @@ void setup() {
   delay(100);
 
   SPIFFS.begin(true);
-
-  http.begin("http://jsonplaceholder.typicode.com/posts");
-  http.addHeader("Content-Type", "text/plain");
 
   settingsManager.loadWifiSettings();
   settingsManager.loadAppSettings();
@@ -298,9 +332,6 @@ void setup() {
     currentMode = Mode::scan;
 
     if (initWifi()) {
-
-      doRequest("POST", "POSTING from ESP32");
-
       if (fingerManager.connected) {
         fingerManager.setLedRingReady();
       } else {
