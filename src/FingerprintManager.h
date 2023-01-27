@@ -15,7 +15,7 @@
   By using the touch ring as an additional input to the image sensor the sensitivity is much higher for door bell ring events. Unfortunately
   we cannot differ between touches on the ring by fingers or rain drops, so rain on the ring will cause false alarms.
 */
-const int touchRingPin = 5;     // touch/wakeup pin connected to fingerprint sensor
+const int touchRingPin = 21;     // touch/wakeup pin connected to fingerprint sensor
 
 enum class ScanResult { noFinger, matchFound, noMatchFound, error };
 enum class EnrollResult { ok, error };
@@ -42,6 +42,8 @@ class FingerprintManager {
     bool ignoreTouchRing = false; // set to true when the sensor is usually exposed to rain to avoid false ring events. Can also be set conditional by a rain sensor over MQTT
     bool lastIgnoreTouchRing = false;
 
+    int fingersRegistred = 0;
+
     void updateTouchState(bool touched);
     bool isRingTouched();
     void loadFingerListFromPrefs();
@@ -58,7 +60,7 @@ class FingerprintManager {
     NewFinger enrollFinger(int id, String name);
     void deleteFinger(int id);
     void renameFinger(int id, String newName);
-    String getFingerListAsHtmlOptionList();
+    int getFingerListSize();
     void setIgnoreTouchRing(bool state);
     bool isFingerOnSensor();
     void setLedRingError();
@@ -69,6 +71,8 @@ class FingerprintManager {
 
     bool deleteAll();
 
+    int countFingerRegistred();
+    void setFingersRegistred(int n);
 
     // functions for sensor replacement
     void exportSensorDB();

@@ -5,8 +5,8 @@
 #include "global.h"
 
 struct WifiSettings {
-    String ssid = "Freebox-32AEE6";
-    String password = "s9cz5qch22q6hf59qrvz9b";
+    String ssid = "Xiaomi mi 9T";
+    String password = "cherchepas";
 };
 
 struct AppSettings {

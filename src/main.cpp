@@ -17,7 +17,7 @@
 #include "global.h"
 #include "player.h"
 
-#define BUZZER_PIN 13
+#define BUZZER_PIN 27
 
 const char* VersionInfo = "0.4";
 
@@ -31,15 +31,15 @@ String logMessages[logMessagesCount]; // log messages, 0=most recent log message
 bool shouldReboot = false;
 unsigned long wifiReconnectPreviousMillis = 0;
 
-String enrollId;
+int enrollId;
 String enrollName;
 HTTPClient http;
 Mode currentMode = Mode::scan;
-MelodyPlayer player(BUZZER_PIN);
+MelodyPlayer player(BUZZER_PIN, 0, false);
+Melody track;
 FingerprintManager fingerManager;
 SettingsManager settingsManager;
 bool needMaintenanceMode = false;
-
 long lastMsg = 0;
 char msg[50];
 int value = 0;
@@ -97,11 +97,6 @@ void notifyClients(String message) {
   addLogMessage(messageWithTimestamp);
 }
 
-void updateClientsFingerlist(String fingerlist) {
-  Serial.println("New fingerlist was sent to clients");
-}
-
-
 bool doPairing() {
   String newPairingCode = settingsManager.generateNewPairingCode();
 
@@ -158,7 +153,7 @@ void doScan() {
   {
     case ScanResult::noFinger:
       // standard case, occurs every iteration when no finger touchs the sensor
-      Serial.println("no finger");
+      // Serial.println("no finger");
       // if (match.scanResult != lastMatch.scanResult) {
       //   Serial.println("no finger");
       // }
@@ -166,48 +161,64 @@ void doScan() {
     case ScanResult::matchFound:
       notifyClients( String("Match Found: ") + match.matchId + " - " + match.matchName  + " with confidence of " + match.matchConfidence );
       if (match.scanResult != lastMatch.scanResult) {
-        if (checkPairingValid()) {
-          Serial.println("Open the door!");
+        if (match.matchId != lastMatch.matchId) {
+          if (checkPairingValid()) {
+            // Ouvre la porte et sonne
+            Serial.println("Open the door!");
+            track = getTrackPath("string", "reussi:d=4,o=5,b=250:e,8p,8f,8g,8p,3c6");
+
+            if (track) {
+              player.play(track);
+            }
+          }
         } else {
-          Serial.println("Security issue! invalid sensor pairing! This could potentially be an attack! If the sensor is new or has been replaced by you do a (re)pairing in settings page.");
+          // Mode enregistrement
+          enrollId = fingerManager.countFingerRegistred() + 1;
+          enrollName = "newFingerprintName_" + String(1);
+          currentMode = Mode::enroll;
         }
+      } else {
+        Serial.println("Security issue! invalid sensor pairing! This could potentially be an attack! If the sensor is new or has been replaced by you do a (re)pairing in settings page.");
       }
+
+      lastMatch = match;
+      lastMatch.scanResult = ScanResult::noFinger;
       delay(3000); // wait some time before next scan to let the LED blink
       break;
     case ScanResult::noMatchFound:
       notifyClients(String("No Match Found (Code ") + match.returnCode + ")");
       if (match.scanResult != lastMatch.scanResult) {
-        Serial.println("MQTT message sent: ring the bell!");
+        track = getTrackPath("file", "goodbad");
 
-
-        enrollId = 1;
-        enrollName = "newFingerprintName";
-        currentMode = Mode::enroll;
+        if (track) {
+          player.play(track);
+        }
         delay(1000);
       } else {
         Serial.println("Not the same finger.");
         delay(1000); // wait some time before next scan to let the LED blink
       }
+
+      lastMatch = match;
+      lastMatch.scanResult = ScanResult::noFinger;
       break;
     case ScanResult::error:
       notifyClients(String("ScanResult Error (Code ") + match.returnCode + ")");
       break;
   };
-
-  lastMatch = match;
 }
 
 void doEnroll() {
-  int id = enrollId.toInt();
+  int id = enrollId;
   if (id < 1 || id > 200) {
-    notifyClients("Invalid memory slot id '" + enrollId + "'");
+    notifyClients("Invalid memory slot id '" + String(enrollId) + "'");
     return;
   }
 
   NewFinger finger = fingerManager.enrollFinger(id, enrollName);
   if (finger.enrollResult == EnrollResult::ok) {
     notifyClients("Enrollment successfull. You can now use your new finger for scanning.");
-    updateClientsFingerlist(fingerManager.getFingerListAsHtmlOptionList());
+    fingerManager.setFingersRegistred(enrollId);
   }  else if (finger.enrollResult == EnrollResult::error) {
     notifyClients(String("Enrollment failed. (Code ") + finger.returnCode + ")");
   }
@@ -267,14 +278,6 @@ void setup() {
 
   SPIFFS.begin(true);
 
-  // Simple way to play track
-  // Melody track = getTrackPath("string", "California Love:d=4,o=5,b=90:8g.6,16f6,8c#6,8d6,8f6,d.6,2p,8g,8a#,8d6,8d6,p,8p,8g,8g,16g,8f.,8g,2p,8g,16a#,16g,8d6,2d6,16g,8g.,g,2p,8g,8a#,8d6,2d.6,16g,16g,8g,8f,8g,p,8g,8c6,8c6,8a#,8a,g,p,8g,c6,8a#,8a,2g,");
-  // Melody track = getTrackPath("file", "takeOnMe");
-
-  // if (track) {
-  //   player.play(track);
-  // }
-
   http.begin("http://jsonplaceholder.typicode.com/posts");
   http.addHeader("Content-Type", "text/plain");
 
@@ -321,7 +324,6 @@ void loop() {
   switch (currentMode) {
   case Mode::scan:
     if (fingerManager.connected)
-      Serial.println("Mode Scan");
       doScan();
     break;
 
@@ -329,6 +331,8 @@ void loop() {
     Serial.println("Mode Enroll");
     doEnroll();
     currentMode = Mode::scan; // switch back to scan mode after enrollment is done
+
+    Serial.println("Enter in mode Scan");
     break;
 
   case Mode::maintenance:

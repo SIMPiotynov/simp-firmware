@@ -78,13 +78,12 @@ Match FingerprintManager::scanFingerprint() {
 
   // finger detection by capacitive touchRing state (increased sensitivy but error prone due to rain)
   bool ringTouched = false;
-  if (!ignoreTouchRing)
-  {
+  if (!ignoreTouchRing) {
     if (isRingTouched())
       ringTouched = true;
     if (ringTouched || lastTouchState) {
         updateTouchState(true);
-        //Serial.println("touched");
+        Serial.println("touched");
     } else {
         updateTouchState(false);
         match.scanResult = ScanResult::noFinger;
@@ -215,8 +214,6 @@ Match FingerprintManager::scanFingerprint() {
 
 }
 
-
-
 // Preferences
 void FingerprintManager::loadFingerListFromPrefs() {
   Preferences preferences;
@@ -232,11 +229,20 @@ void FingerprintManager::loadFingerListFromPrefs() {
       fingerList[i] = String("@empty");
   }
   Serial.println(String(counter) + " fingers loaded from preferences.");
+  setFingersRegistred(counter);
   if (counter != finger.templateCount)
     notifyClients(String("Warning: Fingerprint count mismatch! ") + finger.templateCount + " fingerprints stored on sensor, but we are aware of " + counter + " fingerprints.");
   preferences.end();
 }
 
+
+int FingerprintManager::countFingerRegistred() {
+  return fingersRegistred;
+};
+
+void FingerprintManager::setFingersRegistred(int n) {
+  fingersRegistred = n;
+};
 
 // Add/Enroll fingerprint
 NewFinger FingerprintManager::enrollFinger(int id, String name) {
@@ -400,21 +406,8 @@ void FingerprintManager::renameFinger(int id, String newName) {
   }
 }
 
-String FingerprintManager::getFingerListAsHtmlOptionList() {
-  String htmlOptions = "";
-  int counter = 0;
-  for (int i=1; i<=200; i++) {
-    if (fingerList[i].compareTo("@empty") != 0) {
-      String option;
-      if (counter == 0)
-        option = "<option value=\"" + String(i) + "\" selected>" + String(i) + " - " + fingerList[i] + "</option>";
-      else
-        option = "<option value=\"" + String(i) + "\">" + String(i) + " - " + fingerList[i] + "</option>";
-      htmlOptions += option;
-      counter++;
-    }
-  }
-  return htmlOptions;
+int FingerprintManager::getFingerListSize() {
+  return sizeof(fingerList) / sizeof(fingerList[0]);
 }
 
 void FingerprintManager::setIgnoreTouchRing(bool state) {
